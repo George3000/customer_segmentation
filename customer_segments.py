@@ -19,7 +19,7 @@
 # 
 # Run the code block below to load the wholesale customers dataset, along with a few of the necessary Python libraries required for this project. You will know the dataset loaded successfully if the size of the dataset is reported.
 
-# In[3]:
+# In[31]:
 
 
 # Import libraries necessary for this project
@@ -47,7 +47,7 @@ except:
 # 
 # Run the code block below to observe a statistical description of the dataset. Note that the dataset is composed of six important product categories: **'Fresh'**, **'Milk'**, **'Grocery'**, **'Frozen'**, **'Detergents_Paper'**, and **'Delicatessen'**. Consider what each category represents in terms of products you could purchase.
 
-# In[4]:
+# In[32]:
 
 
 # Display a description of the dataset
@@ -57,17 +57,24 @@ display(data.describe())
 # ### Implementation: Selecting Samples
 # To get a better understanding of the customers and how their data will transform through the analysis, it would be best to select a few sample data points and explore them in more detail. In the code block below, add **three** indices of your choice to the `indices` list which will represent the customers to track. It is suggested to try different sets of samples until you obtain customers that vary significantly from one another.
 
-# In[5]:
+# In[33]:
 
 
 # TODO: Select three indices of your choice you wish to sample from the dataset
+# changed from mean to median because  features' distribution is highly right-skewed
 indices = [44,140,359]
 # Create a DataFrame of the chosen samples
 samples = pd.DataFrame(data.loc[indices], columns = data.keys()).reset_index(drop = True)
 print("Chosen samples of wholesale customers dataset:")
 display(samples)
-display(samples - np.round(data.mean()))
-display(np.round(data.mean()))
+display((samples - np.round(data.median()))/data.std())
+display(np.round(data.median()))
+
+
+import seaborn as sns
+percentiles_data = 100*data.rank(pct=True)
+percentiles_samples = percentiles_data.iloc[indices]
+sns.heatmap(percentiles_samples, annot=True)
 
 
 # ### Question 1
@@ -88,9 +95,10 @@ display(np.round(data.mean()))
 
 # **Answer:**
 # 
-# * First customer (index=0) has a high `fresh` and `frozen` about 2.5 times above the average each. This suggests a wholesale establishment store for fresh and frozen products or a frozen wholesale store and another fresh vegetables market.
-# * Second customer (index=1) seems to represent a supermarket store given the very high spending in `fresh`, `milk`, `groceries`, and `delis` and average `detergents_paper` category.
-# * The third customer (index=2) has highest spending on all categories except `detergents_paper` which is close to 0. I would say this customers prefers urban groceries/market stores
+# * First customer (index=0) has a high `milk`, `grocery`, and `detergents_paper`. I would say this customers prefers urban groceries/market stores
+# * Second customer (index=1) has highest expenses in `delicatessen`, `fresh` and lower but still high on the rest. I would say this customer represent a supermarket store
+# * The third customer (index=2) has high expenditure `milk` and lower in `delicatessen` that sems to fit a restaurant/deli place.
+# 
 # 
 # This exercise helps a bit to get a sense that most customers have combination of establishments with some more represented than others. I find that there may be a category or two under represented than one category or two being overrepresented.  This dataset seems ripe for a market basket analysis.
 # 
@@ -105,7 +113,7 @@ display(np.round(data.mean()))
 #  - Import a decision tree regressor, set a `random_state`, and fit the learner to the training data.
 #  - Report the prediction score of the testing set using the regressor's `score` function.
 
-# In[6]:
+# In[34]:
 
 
 # TODO: Make a copy of the DataFrame, using the 'drop' function to drop the given feature
@@ -119,17 +127,24 @@ from sklearn.model_selection import train_test_split
 # test all six product categories to get a better sense of the data
 # create loop to cycle to all features one at a time and calculate R_square(score)
 for feature in data.keys():
-    y = data[feature]
-    X = data.drop([feature], axis = 1)
-    # TODO: Split the data into training and testing sets(0.25) using the given feature as the target
-    # Set a random state.
-    X_train, X_test, y_train, y_test =  train_test_split(X , y, test_size=0.25, random_state=3)
-    # TODO: Create a decision tree regressor and fit it to the training set
-    regressor = DecisionTreeRegressor(random_state=3)
-    regressor.fit(X_train,y_train)
-    # TODO: Report the score of the prediction using the testing set
-    score = regressor.score(X_test, y_test)
-    print (str(feature)+ " has a score of " + str(np.round(score, 2)))
+    # replace random_state with a R^2 averaged over 100 iterations
+    score_sum = 0 #reset to 0 after each 100x loop
+    for l in range(100):
+        y = data[feature]
+        X = data.drop([feature], axis = 1)
+        # TODO: Split the data into training and testing sets(0.25) using the given feature as the target
+        # Set a random state.
+        X_train, X_test, y_train, y_test =  train_test_split(X , y, test_size=0.25)
+        # TODO: Create a decision tree regressor and fit it to the training set
+        regressor = DecisionTreeRegressor()
+        regressor.fit(X_train,y_train)
+        # TODO: Report the score of the prediction using the testing set
+        score = regressor.score(X_test, y_test)
+        score_sum +=score
+        
+    # calc average
+    r_squared = score_sum/100
+    print (str(feature)+ " has a R^2 score of " + str(np.round(r_squared, 2)))
 
 
 # ### Question 2
@@ -142,22 +157,25 @@ for feature in data.keys():
 
 # **Answer:**
 # 
-# * I attempted to predict all features (score results above). It appears `Grocery` has the highest positive score of 0.7 followed `Detergents_Paper` at 0.56 making them the best candidates to use to predict the other features.  
+# I attempted to predict all features (score results above). I replaced random_state option with a loop and calculated the average R^2 score after 100 iterations. I will keep the features that cannot be predicted by other feature because they provide unique information.
 # 
-# * `Frozen`, `Delicatessen` and ` Fresh` have negative scores making them hard to use to predict the other features. 
+# * `Fresh`, `Frozen`, and `Delicatessen` as dependent variables have negative R^2 scores. They are good for identifying customers' spending because the remaining features fail to fit the data.
+# * `Milk` has very low R2 score of 0.07. Similar with the above case of negative R^2  `milk`  is important for identifying customers' spending.
+# * `Grocery`, and `Detergents_Paper` have the highest scores (0.67 and 0.68) of all features, though not a great fit. They may not be needed relative to the other features.
+#  
 # 
 
 # ### Visualize Feature Distributions
 # To get a better understanding of the dataset, we can construct a scatter matrix of each of the six product features present in the data. If you found that the feature you attempted to predict above is relevant for identifying a specific customer, then the scatter matrix below may not show any correlation between that feature and the others. Conversely, if you believe that feature is not relevant for identifying a specific customer, the scatter matrix might show a correlation between that feature and another feature in the data. Run the code block below to produce a scatter matrix.
 
-# In[7]:
+# In[35]:
 
 
 # Produce a scatter matrix for each pair of features in the data
 pd.plotting.scatter_matrix(data, alpha = 1, figsize = (28,16), diagonal = 'kde');
 
 
-# In[8]:
+# In[36]:
 
 
 import seaborn as sns
@@ -166,7 +184,7 @@ sns.set(style="ticks")
 sns.pairplot(data)
 
 
-# In[9]:
+# In[37]:
 
 
 import pandas as pd
@@ -203,11 +221,11 @@ sns.heatmap(corr, annot=True,mask=mask, cmap=cmap, vmax=.3, center=0,
 
 # **Answer:**
 # 
-# The scatter matrix underscores the prediction scores results from question 2. I notice a linear correlation between `Grocery` and `Detergents_Paper` and a lesser extent `Milk` features. 
+# The most significant correlation is between Grocery and Detergents_Paper. Milk is also correlated with both these features, but the correlation is not very strong. This aligns with the R^2 interpretations from the previous question.
 # 
-# In addition, all features seem to have most of their data points concentrated around zero denoting a non normal distribution with a strong right skewness.
+# In addition, all features seem to have most of their data points concentrated around zero denoting a non normal distribution with a strong right skewness. Because GMM and Kmeans algorithms works for data features that are relatively normally distributed it will be necessary to normalize them.
 # 
-# I also observed outlier values for all features ranging from approximately 4 to 8 outlier per feature. In order to visualize the outlier better (and practice more) I changes some setting for the pandas scatter_matric and build a scatter matric with seaborn package as well.  
+# I also observed outlier values for all features ranging from approximately 4 to 8 outlier per feature. In order to visualize the outlier better (and practice more) I changed some setting for the pandas scatter_matric and build a scatter matric with seaborn package as well.  
 # 
 # I also built a heatmap with correlation values. The heatmap confirms the findings from the scatter matrix.
 # 
@@ -223,7 +241,7 @@ sns.heatmap(corr, annot=True,mask=mask, cmap=cmap, vmax=.3, center=0,
 #  - Assign a copy of the data to `log_data` after applying logarithmic scaling. Use the `np.log` function for this.
 #  - Assign a copy of the sample data to `log_samples` after applying logarithmic scaling. Again, use `np.log`.
 
-# In[10]:
+# In[38]:
 
 
 # TODO: Scale the data using the natural logarithm
@@ -241,7 +259,7 @@ pd.plotting.scatter_matrix(log_data, alpha = 0.3, figsize = (14,8), diagonal = '
 # 
 # Run the code below to see how the sample data has changed after having the natural logarithm applied to it.
 
-# In[11]:
+# In[39]:
 
 
 # Display the log-transformed sample data
@@ -260,8 +278,11 @@ display(log_samples)
 # **NOTE:** If you choose to remove any outliers, ensure that the sample data does not contain any of these points!  
 # Once you have performed this implementation, the dataset will be stored in the variable `good_data`.
 
-# In[12]:
+# In[40]:
 
+
+from collections import Counter
+outliers_all = []
 
 # For each feature find the data points with extreme high or low values
 for feature in log_data.keys():
@@ -283,22 +304,33 @@ for feature in log_data.keys():
     log_data_1=log_data.copy()
     log_data_1['outlier'] = ~((log_data[feature] >= Q1 - step) & (log_data[feature] <= Q3 + step))
     
+    feature_outliers = log_data[~((log_data[feature] >= Q1 - step) & (log_data[feature] <= Q3 + step))]
+    outliers_all.extend(list(feature_outliers.index.values))
     
+# multiple feature outliers
+outliers_mult = [item for item, count in Counter(outliers_all).items() if count > 1]
+
 # OPTIONAL: Select the indices for data points you wish to remove
-outliers  = [65, 66 , 75, 128, 154]
-#outliers  = []
+#outliers  = [65, 66 , 75, 128, 154]
+outliers  = outliers_mult
 
 # Remove the outliers, if any were specified
 good_data = log_data.drop(log_data.index[outliers]).reset_index(drop = True)
 
 
-# In[13]:
+# In[41]:
+
+
+outliers_mult
+
+
+# In[42]:
 
 
 log_data_1.groupby('outlier').count()
 
 
-# In[14]:
+# In[43]:
 
 
 # a visual look at outliers data points
@@ -330,7 +362,9 @@ sns.pairplot(log_data_1, hue='outlier', markers=["o", "s"],palette="Paired" )
 # 
 # For this dataset, I assume there are no data cleansing issues. Next, I would look if they come from the target population. If they do not then I delete them. Again, I assume for this project that they come from the target population. 
 # 
-# According to the Tukey’s method for outlier detection, we have 14 outliers in total with five of them in more than one feature. Since our dataset has 426 observations, 3.3% are outliers (14/426). I think it's is safe to remove the five outliers that show in more than one product category. 
+# According to the Tukey’s method for outlier detection, we have 42 outliers in total with five of them in more than one feature. Since our dataset has 440 observations, 9.5% are outliers (42/440). 
+# 
+# In the context of clustering outliers are important. Anscombe's quartet (https://en.wikipedia.org/wiki/Anscombe%27s_quartet) shows how outliers can have a big impact. I remove the five outliers that show in more than one product category based on the assumption that it is a data quality issue.
 # 
 
 # ## Feature Transformation
@@ -344,7 +378,7 @@ sns.pairplot(log_data_1, hue='outlier', markers=["o", "s"],palette="Paired" )
 #  - Import `sklearn.decomposition.PCA` and assign the results of fitting PCA in six dimensions with `good_data` to `pca`.
 #  - Apply a PCA transformation of `log_samples` using `pca.transform`, and assign the results to `pca_samples`.
 
-# In[15]:
+# In[44]:
 
 
 # TODO: Apply PCA by fitting the good data with the same number of dimensions as features
@@ -360,6 +394,13 @@ pca_samples = pca.transform(log_samples)
 pca_results = vs.pca_results(good_data, pca)
 
 
+# In[45]:
+
+
+# Cumulative explained variance should add to 1
+display(pca_results['Explained Variance'].cumsum())
+
+
 # ### Question 5
 # 
 # * How much variance in the data is explained* **in total** *by the first and second principal component? 
@@ -369,6 +410,8 @@ pca_results = vs.pca_results(good_data, pca)
 # **Hint:** A positive increase in a specific dimension corresponds with an *increase* of the *positive-weighted* features and a *decrease* of the *negative-weighted* features. The rate of increase or decrease is based on the individual feature weights.
 
 # **Answer:**
+# 
+# In the first PC 44.30% of variance in the data is explained. In the first two PCs 70.68% of the variance in the data is explained. While a principal component by itself does not represent a particular type of customers, high/low values along the PC dimensions can help identify types of customers.
 # 
 # The first principal component is correlated with three of the six original variables `Detergents_Paper`, `Grocery`, and `Milk`. The first principal component decreases with `Detergents_Paper`, `Grocery`, and `Milk` scores.  This suggest that these three criteria vary together.  If one decreases, the others tend to decrease as well. I would say PC1 can be viewed as regular retailer of common households items and a measure of mainly   `Detergents_Paper` as it’s the only variable with a correlation score below -0.5. Furthermore, the first principal component explains the most cumulative variance in the original data.
 # 
@@ -384,7 +427,7 @@ pca_results = vs.pca_results(good_data, pca)
 # ### Observation
 # Run the code below to see how the log-transformed sample data has changed after having a PCA transformation applied to it in six dimensions. Observe the numerical value for the first four dimensions of the sample points. Consider if this is consistent with your initial interpretation of the sample points.
 
-# In[16]:
+# In[46]:
 
 
 # Display sample log-data after having a PCA transformation applied
@@ -399,7 +442,7 @@ display(pd.DataFrame(np.round(pca_samples, 4), columns = pca_results.index.value
 #  - Apply a PCA transformation of `good_data` using `pca.transform`, and assign the results to `reduced_data`.
 #  - Apply a PCA transformation of `log_samples` using `pca.transform`, and assign the results to `pca_samples`.
 
-# In[17]:
+# In[47]:
 
 
 # TODO: Apply PCA by fitting the good data with only two dimensions
@@ -421,7 +464,7 @@ reduced_data = pd.DataFrame(reduced_data, columns = ['Dimension 1', 'Dimension 2
 # ### Observation
 # Run the code below to see how the log-transformed sample data has changed after having a PCA transformation applied to it using only two dimensions. Observe how the values for the first two dimensions remains unchanged when compared to a PCA transformation in six dimensions.
 
-# In[18]:
+# In[48]:
 
 
 # Display sample log-data after applying PCA transformation in two dimensions
@@ -433,7 +476,7 @@ display(pd.DataFrame(np.round(pca_samples, 4), columns = ['Dimension 1', 'Dimens
 # 
 # Run the code cell below to produce a biplot of the reduced-dimension data.
 
-# In[19]:
+# In[49]:
 
 
 # Create a biplot
@@ -494,7 +537,7 @@ vs.biplot(good_data, reduced_data, pca)
 #  - Import `sklearn.metrics.silhouette_score` and calculate the silhouette score of `reduced_data` against `preds`.
 #    - Assign the silhouette score to `score` and print the result.
 
-# In[20]:
+# In[50]:
 
 
 # TODO: Apply your clustering algorithm of choice to the reduced data 
@@ -525,7 +568,7 @@ for cv_type in cv_types:
         print (" GMM of type " + str(cv_type) + " and "+ str(n_components) + " clusters has a silhouette coefficient of " + str(np.round(score, 4)) + ".")
 
 
-# In[21]:
+# In[51]:
 
 
 
@@ -556,11 +599,18 @@ print (" GMM of type " + str('spherical') + " and "+ str(2) + " clusters has a s
 
 # **Answer:**
 # The best silhouette score is given by a spherical GMM with 2 clusters (0.42) although it seems that regardless of the GMM type the score is best for 2 clusters.
+# 
+# 
+# Miscellaneous remarks(to explore further):
+# * For more support on results obtained using silhouette analysis, one way is to check how balanced are the clusters obtained from different values of number of clusters, using the code given at this [link](http://scikit-learn.org/stable/auto_examples/cluster/plot_kmeans_silhouette_analysis.html#sphx-glr-auto-examples-cluster-plot-kmeans-silhouette-analysis-py).
+# * Therefore in certain cases, a value for number of clusters which gives a sub-optimal score makes sense. For example, in the link provided, 2 is not considered optimal, despite having a better Silhouette score, because it doesn't result in balanced clusters, while 4 does.
+# * From [sklearn documentation](http://scikit-learn.org/stable/modules/generated/sklearn.metrics.silhouette_samples.html), the Silhouette Coefficient is calculated using the mean intra-cluster distance and the mean nearest-cluster distance for each sample. Therefore, it makes sense to use the same distance metric here as the one used in the clustering algorithm. This is [Euclidean](https://en.wikipedia.org/wiki/Euclidean_distance) for KMeans (default metric for Silhouette score) and [Mahalanobis](https://en.wikipedia.org/wiki/Mahalanobis_distance) for general GMM.
+# * For GMM, [BIC](http://scikit-learn.org/stable/auto_examples/mixture/plot_gmm_selection.html) could sometimes be a better criterion for deciding on the optimal number of clusters, since it takes into account the probability information provided by GMM.
 
 # ### Cluster Visualization
 # Once you've chosen the optimal number of clusters for your clustering algorithm using the scoring metric above, you can now visualize the results by executing the code block below. Note that, for experimentation purposes, you are welcome to adjust the number of clusters for your clustering algorithm to see various visualizations. The final visualization provided should, however, correspond with the optimal number of clusters. 
 
-# In[22]:
+# In[52]:
 
 
 # Display the results of the clustering from implementation
@@ -575,7 +625,7 @@ vs.cluster_results(reduced_data, preds, centers, pca_samples)
 #  - Apply the inverse function of `np.log` to `log_centers` using `np.exp` and assign the true centers to `true_centers`.
 # 
 
-# In[23]:
+# In[53]:
 
 
 # TODO: Inverse transform the centers
@@ -589,7 +639,7 @@ segments = ['Segment {}'.format(i) for i in range(0,len(centers))]
 true_centers = pd.DataFrame(np.round(true_centers), columns = data.keys())
 true_centers.index = segments
 display(true_centers)
-display(true_centers - data.mean().round())
+display(true_centers - data.median().round())
 
 
 # ### Question 8
@@ -616,7 +666,7 @@ display(true_centers - data.mean().round())
 # 
 # Run the code block below to find which cluster each sample point is predicted to be.
 
-# In[24]:
+# In[54]:
 
 
 # Display the predictions
@@ -672,7 +722,7 @@ for i, pred in enumerate(sample_preds):
 # 
 # Run the code block below to see how each data point is labeled either `'HoReCa'` (Hotel/Restaurant/Cafe) or `'Retail'` the reduced space. In addition, you will find the sample points are circled in the plot, which will identify their labeling.
 
-# In[26]:
+# In[55]:
 
 
 # Display the clustering results based on 'Channel' data
@@ -684,6 +734,19 @@ vs.channel_results(reduced_data, outliers, pca_samples)
 # * How well does the clustering algorithm and number of clusters you've chosen compare to this underlying distribution of Hotel/Restaurant/Cafe customers to Retailer customers? 
 # * Are there customer segments that would be classified as purely 'Retailers' or 'Hotels/Restaurants/Cafes' by this distribution? 
 # * Would you consider these classifications as consistent with your previous definition of the customer segments?
+
+# In[59]:
+
+
+#calculate the accuracy score for clustering
+channel_labels = pd.read_csv("customers.csv")["Channel"]
+channel_labels = channel_labels.drop(channel_labels.index[outliers]).reset_index(drop = True) - 1
+# -1 because channel_labels are 1 and 2, while our cluster-labels are 0 and 1
+# channel_labels = abs(channel_labels -1)
+from sklearn.metrics import accuracy_score
+accuracy = accuracy_score(channel_labels,preds)
+display(accuracy)
+
 
 # **Answer:**
 # 
